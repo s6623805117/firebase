@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="th" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Sensor Hub | ESP32</title>
+    
+    <link rel="icon" type="image/png" href="icon.png">
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class', 
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Prompt', 'sans-serif'], // เปลี่ยนฟอนต์เป็น Prompt
+                    },
+                    animation: {
+                        'fade-in-up': 'fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'bounce-delay-1': 'bounce 1.4s infinite ease-in-out both',
+                        'bounce-delay-2': 'bounce 1.4s infinite ease-in-out both -0.16s',
+                        'bounce-delay-3': 'bounce 1.4s infinite ease-in-out both -0.32s',
+                    },
+                    keyframes: {
+                        fadeInUp: {
+                            '0%': { opacity: '0', transform: 'translateY(30px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                        bounce: {
+                            '0%, 80%, 100%': { transform: 'scale(0)' },
+                            '40%': { transform: 'scale(1)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Google Fonts: Prompt -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Google Material Symbols (แทน Lucide) -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    
+    <!-- Chart.js (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        .tabular-nums {
+            font-variant-numeric: tabular-nums;
+        }
+        body {
+            transition: background-color 0.4s ease, color 0.4s ease;
+        }
+        /* Custom Scrollbar for a cleaner look */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+        
+        input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+            filter: invert(0.6);
+        }
+        .dark input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-200 min-h-screen p-4 md:p-8 flex flex-col items-center overflow-hidden">
+
+    <!-- NEW Loading Screen: Minimal Bouncing Dots -->
+    <div id="loading-screen" class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 transition-opacity duration-1000">
+        <div class="flex space-x-3 mb-6">
+            <div class="w-5 h-5 bg-teal-500 rounded-full animate-bounce-delay-3 shadow-lg shadow-teal-500/50"></div>
+            <div class="w-5 h-5 bg-blue-500 rounded-full animate-bounce-delay-2 shadow-lg shadow-blue-500/50"></div>
+            <div class="w-5 h-5 bg-indigo-500 rounded-full animate-bounce-delay-1 shadow-lg shadow-indigo-500/50"></div>
+        </div>
+        <h2 class="text-xl font-medium text-slate-600 dark:text-slate-300 tracking-widest uppercase" data-th="กำลังเชื่อมต่ออุปกรณ์..." data-en="Connecting Device...">กำลังเชื่อมต่ออุปกรณ์...</h2>
+        <p class="mt-3 text-xs text-slate-400 dark:text-slate-500 tracking-wider">SECURE CONNECTION ESTABLISHED</p>
+    </div>
+
+    <!-- Main Content Wrapper -->
+    <div id="main-content" class="w-full max-w-6xl flex flex-col items-center opacity-0 pointer-events-none">
+
+    <!-- Header & Action Buttons -->
+    <div class="w-full flex flex-col md:flex-row justify-between items-center mb-10 mt-2 gap-5">
+        <h1 class="text-3xl md:text-4xl font-bold flex items-center tracking-tight">
+            <span class="material-symbols-outlined text-4xl mr-3 text-indigo-500 drop-shadow-md">space_dashboard</span>
+            <span data-th="ศูนย์ควบคุมข้อมูล" data-en="Data Control Hub">ศูนย์ควบคุมข้อมูล</span>
+        </h1>
+        
+        <div class="flex gap-4">
+            <button id="langToggle" class="px-6 py-2 bg-slate-800 dark:bg-slate-100 dark:text-slate-900 hover:bg-slate-700 text-white rounded-full shadow-lg transition-transform active:scale-90 font-semibold text-sm">
+                EN
+            </button>
+            <button id="themeToggle" class="w-10 h-10 flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-full shadow-md transition-transform active:scale-90">
+                <span class="material-symbols-outlined" id="themeIcon">dark_mode</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Cards Grid (Redesigned with Gradients) -->
+    <div class="w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-10">
+        <!-- Temp Card -->
+        <div class="rounded-2xl shadow-lg p-6 flex flex-col items-start justify-between transform transition-all duration-300 hover:scale-[1.02] bg-gradient-to-br from-rose-500 to-orange-400 text-white relative overflow-hidden">
+            <div class="absolute -right-4 -top-4 opacity-20">
+                <span class="material-symbols-outlined" style="font-size: 120px;">device_thermostat</span>
+            </div>
+            <div class="flex items-center gap-3 mb-6 relative z-10">
+                <div class="bg-white/20 p-2 rounded-xl backdrop-blur-sm">
+                    <span class="material-symbols-outlined">device_thermostat</span>
+                </div>
+                <h2 class="text-lg font-medium opacity-90" data-th="อุณหภูมิห้อง" data-en="Room Temp">อุณหภูมิห้อง</h2>
+            </div>
+            <div class="text-5xl font-bold tabular-nums relative z-10 drop-shadow-md">
+                <span id="tempValue">--</span><span class="text-2xl opacity-75 ml-1 font-medium">°C</span>
+            </div>
+        </div>
+
+        <!-- Humidity Card -->
+        <div class="rounded-2xl shadow-lg p-6 flex flex-col items-start justify-between transform transition-all duration-300 hover:scale-[1.02] bg-gradient-to-br from-cyan-500 to-blue-600 text-white relative overflow-hidden">
+            <div class="absolute -right-4 -top-4 opacity-20">
+                <span class="material-symbols-outlined" style="font-size: 120px;">humidity_percentage</span>
+            </div>
+            <div class="flex items-center gap-3 mb-6 relative z-10">
+                <div class="bg-white/20 p-2 rounded-xl backdrop-blur-sm">
+                    <span class="material-symbols-outlined">humidity_percentage</span>
+                </div>
+                <h2 class="text-lg font-medium opacity-90" data-th="ความชื้นสัมพัทธ์" data-en="Relative Humidity">ความชื้นสัมพัทธ์</h2>
+            </div>
+            <div class="text-5xl font-bold tabular-nums relative z-10 drop-shadow-md">
+                <span id="humiValue">--</span><span class="text-2xl opacity-75 ml-1 font-medium">%</span>
+            </div>
+        </div>
+
+        <!-- Light Card -->
+        <div class="rounded-2xl shadow-lg p-6 flex flex-col items-start justify-between transform transition-all duration-300 hover:scale-[1.02] bg-gradient-to-br from-amber-400 to-orange-500 text-white relative overflow-hidden">
+            <div class="absolute -right-4 -top-4 opacity-20">
+                <span class="material-symbols-outlined" style="font-size: 120px;">wb_sunny</span>
+            </div>
+            <div class="flex items-center gap-3 mb-6 relative z-10">
+                <div class="bg-white/20 p-2 rounded-xl backdrop-blur-sm">
+                    <span class="material-symbols-outlined">light_mode</span>
+                </div>
+                <h2 class="text-lg font-medium opacity-90" data-th="ความสว่าง" data-en="Illuminance">ความสว่าง</h2>
+            </div>
+            <div class="text-5xl font-bold tabular-nums relative z-10 drop-shadow-md">
+                <span id="lightValue">--</span><span class="text-2xl opacity-75 ml-1 font-medium">lx</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Chart Area -->
+    <div class="w-full bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-6 mb-8 border border-slate-100 dark:border-slate-700">
+        <h2 class="text-lg font-semibold mb-6 flex items-center text-slate-700 dark:text-slate-200">
+            <span class="material-symbols-outlined mr-2 text-rose-500 animate-pulse">show_chart</span> 
+            <span data-th="แนวโน้มข้อมูลปัจจุบัน (Live)" data-en="Current Trends (Live)">แนวโน้มข้อมูลปัจจุบัน (Live)</span>
+        </h2>
+        <div class="w-full h-72 md:h-[400px]">
+            <canvas id="liveChart"></canvas>
+        </div>
+    </div>
+
+    <!-- History Chart Area -->
+    <div class="w-full bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-6 mb-8 border border-slate-100 dark:border-slate-700">
+        
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+            <h2 class="text-lg font-semibold flex items-center text-slate-700 dark:text-slate-200 shrink-0">
+                <span class="material-symbols-outlined mr-2 text-indigo-500">history</span> 
+                <span data-th="วิเคราะห์ข้อมูลย้อนหลัง" data-en="Historical Analysis">วิเคราะห์ข้อมูลย้อนหลัง</span>
+            </h2>
+            
+            <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+                <div id="normalControls" class="flex bg-slate-100 dark:bg-slate-900/50 rounded-full p-1 border border-slate-200 dark:border-slate-700">
+                    <button class="time-btn active px-4 py-1.5 rounded-full text-sm font-semibold bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400 transition-all" data-seconds="3600">1H</button>
+                    <button class="time-btn px-4 py-1.5 rounded-full text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-all" data-seconds="86400">24H</button>
+                    <button class="time-btn px-4 py-1.5 rounded-full text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-all" data-seconds="604800">7D</button>
+                </div>
+                
+                <button id="toggleAdvanceBtn" class="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 rounded-full text-sm font-medium border border-slate-200 dark:border-slate-700 flex items-center gap-1 transition-all">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">manage_search</span> 
+                    <span data-th="กำหนดเวลา" data-en="Custom">กำหนดเวลา</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="advanceControls" class="hidden flex-col sm:flex-row gap-4 mb-6 p-5 bg-slate-50 dark:bg-slate-900/40 rounded-xl items-end border border-slate-200 dark:border-slate-700/50">
+            <div class="flex flex-col w-full sm:w-auto">
+                <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5" data-th="เริ่มจาก (Start)" data-en="Start Date">เริ่มจาก (Start)</label>
+                <input type="datetime-local" id="startDate" class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
+            </div>
+            <div class="flex flex-col w-full sm:w-auto">
+                <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5" data-th="สิ้นสุด (End)" data-en="End Date">สิ้นสุด (End)</label>
+                <input type="datetime-local" id="endDate" class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
+            </div>
+            <button id="searchBtn" class="w-full sm:w-auto px-6 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-lg text-sm font-medium shadow-md flex items-center justify-center gap-2 transition-all">
+                <span class="material-symbols-outlined" style="font-size: 18px;">search</span> 
+                <span data-th="ค้นหา" data-en="Query">ค้นหา</span>
+            </button>
+        </div>
+
+        <div class="w-full h-72 md:h-[400px]">
+            <canvas id="historyChart"></canvas>
+        </div>
+        <p id="chartStatus" class="text-xs text-center text-slate-400 mt-4 tabular-nums"></p>
+    </div>
+
+    <!-- Status & Timestamp Area (Redesigned as a minimal footer) -->
+    <div class="mb-12 w-full flex flex-col items-center justify-center">
+        <div class="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm">
+            <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+            <p class="text-slate-600 dark:text-slate-300 text-sm">
+                <span data-th="ซิงค์ข้อมูลล่าสุดเมื่อ:" data-en="Last Sync:">ซิงค์ข้อมูลล่าสุดเมื่อ:</span>
+                <strong id="timestampValue" class="tabular-nums font-semibold ml-1">Waiting...</strong>
+            </p>
+        </div>
+        <p id="connStatus" class="text-xs mt-3 text-slate-400" data-th="กำลังเชื่อมต่อฐานข้อมูล..." data-en="Connecting to DB...">กำลังเชื่อมต่อฐานข้อมูล...</p>
+    </div>
+    </div> <!-- Close main-content -->
+
+    <!-- Loading Screen Script -->
+    <script>
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const loader = document.getElementById('loading-screen');
+                if (loader) loader.classList.add('opacity-0', 'pointer-events-none');
+                document.body.classList.remove('overflow-hidden');
+                
+                const mainContent = document.getElementById('main-content');
+                if (mainContent) {
+                    mainContent.classList.remove('opacity-0', 'pointer-events-none');
+                    mainContent.classList.add('animate-fade-in-up');
+                }
+                
+                setTimeout(() => {
+                    if (loader) loader.remove();
+                }, 1000);
+            }, 1800);
+        });
+    </script>
+
+    <!-- Scripts -->
+    <script>
+        // เปลี่ยนฟอนต์พื้นฐานของกราฟเป็น Prompt
+        Chart.defaults.font.family = "'Prompt', sans-serif";
+        Chart.defaults.color = '#94a3b8'; // slate-400
+        Chart.defaults.scale.grid.color = 'rgba(148, 163, 184, 0.1)';
+    </script>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+        import { getDatabase, ref, onValue, query, limitToLast, orderByChild, startAt, endAt } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js";
+
+        // ---- [ใส่ CONFIG ของคุณตรงนี้] ----
+        const firebaseConfig = {
+            databaseURL: "https://iot-6623805117-default-rtdb.asia-southeast1.firebasedatabase.app/"
+        };
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        
+        const latestRef = ref(db, 'lab/esp32-01/latest');
+        const historyBaseRef = ref(db, 'lab/esp32-01/history');
+
+        // สีของกราฟใหม่ให้เข้ากับ Card
+        const colorTemp = '#f43f5e'; // rose-500
+        const colorHumi = '#0ea5e9'; // sky-500
+        const colorLight = '#f59e0b'; // amber-500
+
+        // ---------------------------------------------
+        // Setup Live Chart.js
+        // ---------------------------------------------
+        const ctxLive = document.getElementById('liveChart').getContext('2d');
+        const liveChart = new Chart(ctxLive, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'อุณหภูมิ (°C)', borderColor: colorTemp, backgroundColor: 'rgba(244, 63, 94, 0.1)', data: [], yAxisID: 'y', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 1 },
+                    { label: 'ความชื้น (%)', borderColor: colorHumi, backgroundColor: 'rgba(14, 165, 233, 0.1)', data: [], yAxisID: 'y', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 1 },
+                    { label: 'แสง (lx)', borderColor: colorLight, backgroundColor: 'rgba(245, 158, 11, 0.1)', data: [], yAxisID: 'y1', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 1 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { legend: { position: 'top' } },
+                scales: {
+                    x: { ticks: { maxTicksLimit: 8 } },
+                    y: { type: 'linear', display: true, position: 'left' },
+                    y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } }
+                },
+                animation: { duration: 0 } 
+            }
+        });
+
+        const liveQuery = query(historyBaseRef, limitToLast(20));
+        onValue(liveQuery, (snapshot) => {
+            const temp = [], humi = [], light = [], labels = [];
+            snapshot.forEach((childSnapshot) => {
+                const data = childSnapshot.val();
+                if(data && data.timestamp) {
+                    temp.push(data.temperature);
+                    humi.push(data.humidity);
+                    light.push(data.light);
+                    const date = new Date(data.timestamp * 1000);
+                    labels.push(date.toLocaleTimeString(currentLang === 'th' ? 'th-TH' : 'en-US', {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
+                }
+            });
+            liveChart.data.labels = labels;
+            liveChart.data.datasets[0].data = temp;
+            liveChart.data.datasets[1].data = humi;
+            liveChart.data.datasets[2].data = light;
+            liveChart.update();
+        });
+
+        // ---------------------------------------------
+        // Setup History Chart.js
+        // ---------------------------------------------
+        const ctxHist = document.getElementById('historyChart').getContext('2d');
+        const historyChart = new Chart(ctxHist, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'อุณหภูมิ (°C)', borderColor: colorTemp, backgroundColor: 'rgba(244, 63, 94, 0.1)', data: [], yAxisID: 'y', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0 },
+                    { label: 'ความชื้น (%)', borderColor: colorHumi, backgroundColor: 'rgba(14, 165, 233, 0.1)', data: [], yAxisID: 'y', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0 },
+                    { label: 'แสง (lx)', borderColor: colorLight, backgroundColor: 'rgba(245, 158, 11, 0.1)', data: [], yAxisID: 'y1', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { ticks: { maxTicksLimit: 10 } },
+                    y: { type: 'linear', display: true, position: 'left' },
+                    y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } }
+                }
+            }
+        });
+
+        // ---------------------------------------------
+        // DOM & Logic
+        // ---------------------------------------------
+        const elTemp = document.getElementById('tempValue');
+        const elHumi = document.getElementById('humiValue');
+        const elLight = document.getElementById('lightValue');
+        const elTime = document.getElementById('timestampValue');
+        const elStatus = document.getElementById('connStatus');
+        const elChartStatus = document.getElementById('chartStatus');
+
+        let currentLang = 'th';
+        const langToggleBtn = document.getElementById('langToggle');
+
+        function updateLanguage() {
+            const elements = document.querySelectorAll('[data-th]');
+            elements.forEach(el => {
+                el.textContent = el.getAttribute(`data-${currentLang}`);
+            });
+            if (lastTimestampUnix) renderTimestamp(lastTimestampUnix);
+            
+            const l_temp = currentLang === 'th' ? 'อุณหภูมิ (°C)' : 'Temp (°C)';
+            const l_humi = currentLang === 'th' ? 'ความชื้น (%)' : 'Humi (%)';
+            const l_light = currentLang === 'th' ? 'แสง (lx)' : 'Light (lx)';
+
+            liveChart.data.datasets[0].label = l_temp;
+            liveChart.data.datasets[1].label = l_humi;
+            liveChart.data.datasets[2].label = l_light;
+            liveChart.update();
+
+            historyChart.data.datasets[0].label = l_temp;
+            historyChart.data.datasets[1].label = l_humi;
+            historyChart.data.datasets[2].label = l_light;
+            historyChart.update();
+        }
+
+        langToggleBtn.addEventListener('click', () => {
+            currentLang = (currentLang === 'th') ? 'en' : 'th';
+            langToggleBtn.textContent = (currentLang === 'th') ? 'EN' : 'TH';
+            updateLanguage();
+        });
+
+        const themeToggleBtn = document.getElementById('themeToggle');
+        themeToggleBtn.addEventListener('click', () => {
+            const html = document.documentElement;
+            html.classList.toggle('dark');
+            const isDark = html.classList.contains('dark');
+            // ใช้ Google Material Symbols
+            document.getElementById('themeIcon').textContent = isDark ? 'light_mode' : 'dark_mode';
+        });
+
+        let lastTimestampUnix = null;
+        const thaiMonths = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+        
+        function renderTimestamp(unixTimeSeconds) {
+            lastTimestampUnix = unixTimeSeconds;
+            const date = new Date(unixTimeSeconds * 1000);
+            if (currentLang === 'th') {
+                const day = date.getDate();
+                const month = thaiMonths[date.getMonth()];
+                const year = date.getFullYear() + 543;
+                const time = date.toLocaleTimeString('th-TH');
+                elTime.textContent = `${day} ${month} ${year}, ${time} น.`;
+            } else {
+                const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit', second:'2-digit', hour12: true };
+                elTime.textContent = date.toLocaleDateString('en-US', options);
+            }
+        }
+
+        onValue(latestRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                elTemp.textContent = typeof data.temperature === 'number' ? data.temperature.toFixed(1) : "--";
+                elHumi.textContent = typeof data.humidity === 'number' ? data.humidity.toFixed(1) : "--";
+                elLight.textContent = typeof data.light === 'number' ? data.light.toFixed(0) : "--";
+                if (data.timestamp) renderTimestamp(data.timestamp);
+                
+                elStatus.textContent = (currentLang === 'th') ? "ระบบซิงค์ข้อมูลทำงานปกติ" : "System online & syncing";
+                elStatus.className = "text-xs mt-2 text-emerald-500 font-medium";
+            }
+        }, (error) => {
+            elStatus.textContent = `Error: ${error.message}`;
+            elStatus.className = "text-xs mt-2 text-rose-500 font-medium";
+        });
+
+        let unsubscribeHistory = null;
+        const SAFE_LIMIT = 3000; 
+
+        function loadChartData(customQuery) {
+            if (unsubscribeHistory) unsubscribeHistory(); 
+            
+            elChartStatus.textContent = (currentLang === 'th') ? "กำลังประมวลผลข้อมูล..." : "Fetching dataset...";
+            
+            try {
+                unsubscribeHistory = onValue(customQuery, (snapshot) => {
+                    const temp = [], humi = [], light = [], labels = [];
+                    let count = 0;
+                    
+                    snapshot.forEach((childSnapshot) => {
+                        const data = childSnapshot.val();
+                        if(data && data.timestamp) {
+                            temp.push(data.temperature);
+                            humi.push(data.humidity);
+                            light.push(data.light);
+                            
+                            const date = new Date(data.timestamp * 1000);
+                            labels.push(date.toLocaleTimeString(currentLang === 'th' ? 'th-TH' : 'en-US', {hour: '2-digit', minute:'2-digit'}));
+                            count++;
+                        }
+                    });
+
+                    historyChart.data.labels = labels;
+                    historyChart.data.datasets[0].data = temp;
+                    historyChart.data.datasets[1].data = humi;
+                    historyChart.data.datasets[2].data = light;
+                    historyChart.update();
+                    
+                    if (count === 0) {
+                        elChartStatus.textContent = (currentLang === 'th') ? "ไม่พบเรคคอร์ดข้อมูลในช่วงเวลาที่เลือก" : "No records found for this period.";
+                    } else {
+                        elChartStatus.textContent = (currentLang === 'th') ? `ดึงข้อมูลสำเร็จ ${count} เรคคอร์ด` : `Successfully fetched ${count} records.`;
+                    }
+                }, (error) => {
+                    elChartStatus.textContent = "Error: " + error.message;
+                    elChartStatus.classList.add("text-rose-500");
+                });
+            } catch (err) {
+                elChartStatus.textContent = "Error: " + err.message;
+            }
+        }
+        
+        const timeBtns = document.querySelectorAll('.time-btn');
+        timeBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                timeBtns.forEach(b => {
+                    b.classList.remove('bg-white', 'dark:bg-slate-700', 'shadow-sm', 'text-indigo-600', 'dark:text-indigo-400');
+                    b.classList.add('text-slate-500', 'dark:text-slate-400');
+                });
+                e.target.classList.add('bg-white', 'dark:bg-slate-700', 'shadow-sm', 'text-indigo-600', 'dark:text-indigo-400');
+                e.target.classList.remove('text-slate-500', 'dark:text-slate-400');
+                
+                const secondsBack = parseInt(e.target.getAttribute('data-seconds'));
+                const startTimeUnix = Math.floor(Date.now() / 1000) - secondsBack;
+                
+                const q = query(historyBaseRef, orderByChild('timestamp'), startAt(startTimeUnix), limitToLast(SAFE_LIMIT));
+                loadChartData(q);
+            });
+        });
+
+        const toggleAdvanceBtn = document.getElementById('toggleAdvanceBtn');
+        const advanceControls = document.getElementById('advanceControls');
+
+        toggleAdvanceBtn.addEventListener('click', () => {
+            advanceControls.classList.toggle('hidden');
+            advanceControls.classList.toggle('flex');
+            
+            if(!advanceControls.classList.contains('hidden')){
+                toggleAdvanceBtn.classList.add('bg-slate-200', 'dark:bg-slate-700');
+            } else {
+                toggleAdvanceBtn.classList.remove('bg-slate-200', 'dark:bg-slate-700');
+            }
+        });
+
+        document.getElementById('searchBtn').addEventListener('click', () => {
+            const startVal = document.getElementById('startDate').value;
+            const endVal = document.getElementById('endDate').value;
+            
+            if(!startVal || !endVal) {
+                alert(currentLang === 'th' ? "ระบุเวลาเริ่มต้นและสิ้นสุดให้ครบถ้วน" : "Please provide both dates.");
+                return;
+            }
+            
+            const startUnix = Math.floor(new Date(startVal).getTime() / 1000);
+            const endUnix = Math.floor(new Date(endVal).getTime() / 1000);
+            
+            if (startUnix > endUnix) {
+                alert(currentLang === 'th' ? "เวลาเริ่มต้นต้องน้อยกว่าเวลาสิ้นสุด" : "Start date must be before end date.");
+                return;
+            }
+            
+            timeBtns.forEach(b => {
+                b.classList.remove('bg-white', 'dark:bg-slate-700', 'shadow-sm', 'text-indigo-600', 'dark:text-indigo-400');
+                b.classList.add('text-slate-500', 'dark:text-slate-400');
+            });
+
+            const q = query(historyBaseRef, orderByChild('timestamp'), startAt(startUnix), endAt(endUnix), limitToLast(SAFE_LIMIT));
+            loadChartData(q);
+        });
+
+        const defaultStartTime = Math.floor(Date.now() / 1000) - 3600;
+        loadChartData(query(historyBaseRef, orderByChild('timestamp'), startAt(defaultStartTime), limitToLast(SAFE_LIMIT)));
+        
+    </script>
+</body>
+</html>
