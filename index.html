@@ -304,8 +304,8 @@
             snapshot.forEach((childSnapshot) => {
                 const data = childSnapshot.val();
                 if(data && data.timestamp) {
-                    temp.push(data.temperature);
-                    humi.push(data.humidity);
+                    temp.push(data.temperature ?? data.temp);
+                    humi.push(data.humidity ?? data.temp);
                     light.push(data.light);
                     const date = new Date(data.timestamp * 1000);
                     labels.push(date.toLocaleTimeString(currentLang === 'th' ? 'th-TH' : 'en-US', {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
