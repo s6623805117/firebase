@@ -304,8 +304,8 @@
             snapshot.forEach((childSnapshot) => {
                 const data = childSnapshot.val();
                 if(data && data.timestamp) {
-                    temp.push(data.temperature ?? data.temp);
-                    humi.push(data.humidity ?? data.humi);
+                    temp.push(data.temperature);
+                    humi.push(data.humidity);
                     light.push(data.light);
                     const date = new Date(data.timestamp * 1000);
                     labels.push(date.toLocaleTimeString(currentLang === 'th' ? 'th-TH' : 'en-US', {hour: '2-digit', minute:'2-digit', second:'2-digit'}));
@@ -414,8 +414,8 @@
         onValue(latestRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                elTemp.textContent = typeof data.temp === 'number' ? data.temp.toFixed(1) : "--";
-                elHumi.textContent = typeof data.humi === 'number' ? data.humi.toFixed(1) : "--";
+                elTemp.textContent = typeof data.temperature === 'number' ? data.temperature.toFixed(1) : "--";
+                elHumi.textContent = typeof data.humidity === 'number' ? data.humidity.toFixed(1) : "--";
                 elLight.textContent = typeof data.light === 'number' ? data.light.toFixed(0) : "--";
                 if (data.timestamp) renderTimestamp(data.timestamp);
                 
@@ -443,8 +443,8 @@
                     snapshot.forEach((childSnapshot) => {
                         const data = childSnapshot.val();
                         if(data && data.timestamp) {
-                            temp.push(data.temp);
-                            humi.push(data.humi);
+                            temp.push(data.temperature);
+                            humi.push(data.humidity);
                             light.push(data.light);
                             
                             const date = new Date(data.timestamp * 1000);
